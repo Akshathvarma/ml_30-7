@@ -1,167 +1,132 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.metrics import confusion_matrix, classification_report, mean_squared_error, mean_absolute_percentage_error, r2_score
 from sklearn.neighbors import KNeighborsClassifier
-from sklearn.metrics import confusion_matrix, classification_report
-from scipy.spatial.distance import minkowski
+from sklearn.linear_model import LinearRegression
+from sklearn.preprocessing import StandardScaler
 
-# loading the csv file
-def get_data(file):
-    data = pd.read_csv(file)
-    return data
+project_df = pd.read_excel("ecg_eeg_features.csv.xlsx")  
+lab_df = pd.read_excel("Lab Session Data.xlsx")          
+lab_df = lab_df[['Candies (#)', 'Mangoes (Kg)', 'Milk Packets (#)', 'Payment (Rs)']].dropna()
 
-# checking average and spread for 2 classes
-def check_spread(data, label_col):
-    labels = data[label_col].unique()[:2]
-    d1 = data[data[label_col] == labels[0]].drop(columns=[label_col])
-    d2 = data[data[label_col] == labels[1]].drop(columns=[label_col])
+X_proj = project_df.drop(columns=['signal_type'])
+y_proj = project_df['signal_type']
+X_train, X_test, y_train, y_test = train_test_split(X_proj, y_proj, test_size=0.3, random_state=42)
 
-    # taking only number features
-    d1 = d1.select_dtypes(include=[np.number])
-    d2 = d2.select_dtypes(include=[np.number])
+model_knn = KNeighborsClassifier(n_neighbors=3)
+model_knn.fit(X_train, y_train)
 
-    # finding average of each feature
-    m1 = d1.mean(axis=0)
-    m2 = d2.mean(axis=0)
+y_pred_train = model_knn.predict(X_train)
+y_pred_test = model_knn.predict(X_test)
 
-    # finding std dev
-    s1 = d1.std(axis=0)
-    s2 = d2.std(axis=0)
+print("A1: ECG Classification")
+print("Train Confusion Matrix:\n", confusion_matrix(y_train, y_pred_train))
+print("Test Confusion Matrix:\n", confusion_matrix(y_test, y_pred_test))
+print("Train Report:\n", classification_report(y_train, y_pred_train))
+print("Test Report:\n", classification_report(y_test, y_pred_test))
 
-    # distance between both class centroids
-    dist = np.linalg.norm(m1 - m2)
+X_lab = lab_df[['Candies (#)', 'Mangoes (Kg)', 'Milk Packets (#)']]
+y_lab = lab_df['Payment (Rs)']
 
-    return m1, s1, m2, s2, dist
+reg_model = LinearRegression()
+reg_model.fit(X_lab, y_lab)
 
-# drawing histogram of any one column
-def plot_hist(data, colname):
-    vals = data[colname].dropna()
-    m = np.mean(vals)
-    v = np.var(vals)
+y_pred_lab = reg_model.predict(X_lab)
 
-    # making the histogram chart
-    plt.hist(vals, bins=10, color='skyblue', edgecolor='black')
-    plt.title(colname + " Histogram")
-    plt.xlabel(colname)
-    plt.ylabel("Count")
-    plt.grid(True)
-    plt.show()
+print("\nA2: Price Prediction")
+print("MSE:", mean_squared_error(y_lab, y_pred_lab))
+print("RMSE:", np.sqrt(mean_squared_error(y_lab, y_pred_lab)))
+print("MAPE:", mean_absolute_percentage_error(y_lab, y_pred_lab))
+print("R² Score:", r2_score(y_lab, y_pred_lab))
 
-    return m, v
+np.random.seed(0)
+train_X = np.random.uniform(1, 10, (20, 2))
+train_y = np.array([0]*10 + [1]*10)
 
-# plotting minkowski distance for r = 1 to 10
-def draw_minkowski(data):
-    num = data.select_dtypes(include=[np.number]).dropna()
-    num = num[~num.isin([np.inf, -np.inf]).any(axis=1)]
+plt.figure()
+plt.scatter(train_X[:10, 0], train_X[:10, 1], color='blue', label='Class 0')
+plt.scatter(train_X[10:, 0], train_X[10:, 1], color='red', label='Class 1')
+plt.legend()
+plt.title("A3: Synthetic Training Data")
+plt.grid(True)
+plt.savefig("a3_training.png")
+plt.close()
 
-    if len(num) < 2:
-        print("Not enough rows.")
-        return
+xx, yy = np.meshgrid(np.arange(0, 10.1, 0.1), np.arange(0, 10.1, 0.1))
+grid = np.c_[xx.ravel(), yy.ravel()]
 
-    a = num.iloc[0].values
-    b = num.iloc[1].values
+knn_3 = KNeighborsClassifier(n_neighbors=3)
+knn_3.fit(train_X, train_y)
 
-    r_vals = range(1, 11)
-    dists = [minkowski(a, b, p=r) for r in r_vals]
+Z = knn_3.predict(grid)
 
-    # plotting the graph
-    plt.plot(r_vals, dists, marker='o', color='green')
-    plt.title('Minkowski r=1 to 10')
-    plt.xlabel('r')
-    plt.ylabel('Dist')
-    plt.grid(True)
-    plt.show()
+plt.figure()
+plt.scatter(grid[:, 0], grid[:, 1], c=Z, cmap='coolwarm', alpha=0.3, s=10)
+plt.scatter(train_X[:, 0], train_X[:, 1], c=train_y, cmap='coolwarm', edgecolors='k')
+plt.title("A4: Decision Boundary (k=3)")
+plt.savefig("a4_k3.png")
+plt.close()
 
-# splitting into train and test sets
-def split_data(data, label_col):
-    data = data[data[label_col].isin(data[label_col].unique()[:2])]
-    x = data.drop(columns=[label_col]).select_dtypes(include=[np.number]).dropna()
-    y = data[label_col]
-    return train_test_split(x, y.loc[x.index], test_size=0.3, random_state=42)
+for k in [1, 5, 10, 15]:
+    knn_k = KNeighborsClassifier(n_neighbors=k)
+    knn_k.fit(train_X, train_y)
+    Zk = knn_k.predict(grid)
 
-# training the model using kNN
-def make_model(x1, y1, k=3):
-    model1 = KNeighborsClassifier(n_neighbors=k)
-    model1.fit(x1, y1)
-    return model1
+    plt.figure()
+    plt.scatter(grid[:, 0], grid[:, 1], c=Zk, cmap='coolwarm', alpha=0.3, s=10)
+    plt.scatter(train_X[:, 0], train_X[:, 1], c=train_y, cmap='coolwarm', edgecolors='k')
+    plt.title(f"A5: Decision Boundary (k={k})")
+    plt.savefig(f"a5_k{k}.png")
+    plt.close()
 
-# checking how good it did
-def get_acc(model1, x2, y2):
-    return model1.score(x2, y2)
+proj_filtered = project_df[project_df['signal_type'].isin(['ECG', 'EEG'])].copy()
+proj_filtered['label'] = proj_filtered['signal_type'].map({'ECG': 0, 'EEG': 1})
 
-# getting predictions for some test points
-def get_preds(model1, x2):
-    return model1.predict(x2)
+X_proj_2d = proj_filtered[['mean_val', 'entropy']].values
+y_proj_2d = proj_filtered['label'].values
 
-# seeing how accuracy changes with different k
-def draw_acc_plot(x1, y1, x2, y2):
-    k_vals = list(range(1, 12))
-    accs = []
+scaler = StandardScaler()
+X_proj_2d_scaled = scaler.fit_transform(X_proj_2d)
 
-    for k in k_vals:
-        mdl = KNeighborsClassifier(n_neighbors=k)
-        mdl.fit(x1, y1)
-        accs.append(mdl.score(x2, y2))
+knn_proj = KNeighborsClassifier(n_neighbors=3)
+knn_proj.fit(X_proj_2d_scaled, y_proj_2d)
 
-    # plot for accuracy vs k
-    plt.plot(k_vals, accs, marker='o')
-    plt.title('k vs Accuracy')
-    plt.xlabel('k')
-    plt.ylabel('Acc')
-    plt.grid(True)
-    plt.show()
+x_min, x_max = X_proj_2d_scaled[:, 0].min() - 1, X_proj_2d_scaled[:, 0].max() + 1
+y_min, y_max = X_proj_2d_scaled[:, 1].min() - 1, X_proj_2d_scaled[:, 1].max() + 1
 
-# checking confusion matrix + precision/recall/f1 etc
-def check_matrix(model1, x1, y1, x2, y2):
-    p1 = model1.predict(x1)
-    p2 = model1.predict(x2)
+xx, yy = np.meshgrid(np.linspace(x_min, x_max, 100), np.linspace(y_min, y_max, 100))
+grid_proj = np.c_[xx.ravel(), yy.ravel()]
+Z_proj = knn_proj.predict(grid_proj).reshape(xx.shape)
 
-    print("\nTrain:")
-    print(classification_report(y1, p1))
+proj_sampled = proj_filtered.sample(n=400, random_state=42)
+X_sampled_scaled = scaler.transform(proj_sampled[['mean_val', 'entropy']])
 
-    print("\nTest:")
-    print(classification_report(y2, p2))
+plt.figure(figsize=(8, 6))
+plt.contourf(xx, yy, Z_proj, cmap='coolwarm', alpha=0.3)
+plt.scatter(X_sampled_scaled[:, 0], X_sampled_scaled[:, 1], c=proj_sampled['label'], cmap='coolwarm', edgecolors='k', s=40)
+plt.title("A6: Project ECG vs EEG (Standardized)")
+plt.xlabel("Standardized mean_val")
+plt.ylabel("Standardized entropy")
+plt.grid(True)
+plt.tight_layout()
+plt.savefig("a6_project_fixed.png")
+plt.close()
 
-    print("Confusion:")
-    print(confusion_matrix(y2, p2))
+param_grid = {
+    'n_neighbors': [1, 3, 5, 7, 9, 11],
+    'weights': ['uniform', 'distance'],
+    'metric': ['euclidean', 'manhattan']
+}
 
+grid_search = GridSearchCV(KNeighborsClassifier(), param_grid, cv=5, scoring='accuracy')
+grid_search.fit(X_train, y_train)
 
-# main part where everything runs
-if __name__ == "__main__":
-    data = get_data("ecg_eeg_features.csv")  # reading the dataset
-    label = data.columns[-1]  # using last col as label
+best_model = grid_search.best_estimator_
+test_score = best_model.score(X_test, y_test)
 
-    print("\nQ1")
-    m1, s1, m2, s2, dist = check_spread(data, label)
-    print(f"Centroid dist: {dist:.2f}")  # just printing the distance between classes
-
-    print("\nQ2")
-    m, v = plot_hist(data, data.select_dtypes(include=[np.number]).columns[0])
-    print(f"Mean: {m:.2f}, Var: {v:.2f}")  # showing mean and variance of that column
-
-    print("\nQ3")
-    draw_minkowski(data)  # calling minkowski thing
-
-    print("\nQ4")
-    x_train, x_test, y_train, y_test = split_data(data, label)
-    print(f"Training data shape: {x_train.shape}, Training labels: {y_train.shape}")
-    print(f"Testing data shape: {x_test.shape}, Testing labels: {y_test.shape}")
-
-    print("\nQ5")
-    model = make_model(x_train, y_train, k=3)
-    print(f"Model trained successfully with k = 3 and {len(x_train)} training samples")
-
-    print("\nQ6")
-    acc = get_acc(model, x_test, y_test)
-    print(f"Test Accuracy: {acc * 100:.2f}%")
-
-    print("\nQ7")
-    p = get_preds(model, x_test[:5])
-    print(f"Preds: {p.tolist()}")  # just showing first 5 predictions
-
-    print("\nQ8")
-    draw_acc_plot(x_train, y_train, x_test, y_test)  # drawing accuracy curve for diff k
-
-    print("\nQ9")
-    check_matrix(model, x_train, y_train, x_test, y_test)  # showing all metrics
+print("\nA7: GridSearchCV Results")
+print("Best Parameters:", grid_search.best_params_)
+print("Best CV Accuracy:", grid_search.best_score_)
+print("Test Accuracy (best model):", test_score)
